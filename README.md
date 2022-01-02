@@ -8,3 +8,13 @@
 <img src="img/random_walk.png">
 
 提出: https://atcoder.jp/contests/rco-contest-2017-qual/submissions/28300922
+
+---
+
+* ランダムウォーク
+* シミュレータを書く
+* スコア最大時点で打ち切り
+
+<img src="img/random_walk_truncated.png">
+
+提出: https://atcoder.jp/contests/rco-contest-2017-qual/submissions/28301098

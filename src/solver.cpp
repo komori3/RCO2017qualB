@@ -178,39 +178,89 @@ template<typename T> bool chmin(T& a, const T& b) { if (a > b) { a = b; return t
 
 using pii = std::pair<int, int>;
 
-constexpr int N = 50;
-constexpr int NN = N * N;
+constexpr int H = 50;
+constexpr int W = 50;
 constexpr int K = 2500; // num turns
+constexpr char d2c[] = "RULD";
+int c2d[256];
+constexpr int dr[] = { 0, -1, 0, 1 };
+constexpr int dc[] = { 1, 0, -1, 0 };
 
-int start_r, start_c;
-std::vector<std::string> board;
-
-struct Food {
-    int r, c, value, decay, used;
-    Food(int r, int c, int value, int decay) : r(r), c(c), value(value), decay(decay), used(false) {}
-    std::string stringify() const {
-        return format("Food [r=%d, c=%d, value=%d, decay=%d, used=%d]", r, c, value, decay, used);
-    }
-};
-
-std::vector<Food> foods;
-
-void init(std::istream& in) {
-    { int buf; in >> buf >> buf >> buf; }
-    in >> start_r >> start_c;
-    start_r--; start_c--;
-    board.resize(N);
-    in >> board;
-    int num_foods;
-    in >> num_foods;
-    for (int i = 0; i < num_foods; i++) {
-        int fr, fc, F, D;
-        in >> fr >> fc >> F >> D;
-        foods.emplace_back(fr - 1, fc - 1, F, D);
-    }
+void init() {
+    c2d['R'] = 0; c2d['U'] = 1; c2d['L'] = 2; c2d['D'] = 3;
 }
 
+struct Food {
+    int id, r, c, value, decay;
+    Food(int id, int r, int c, int value, int decay) : id(id), r(r), c(c), value(value), decay(decay) {}
+    std::string stringify() const {
+        return format("Food [id=%d, r=%d, c=%d, value=%d, decay=%d]", id, r, c, value, decay);
+    }
+};
+std::ostream& operator<<(std::ostream& o, Food* f) {
+    o << (f ? f->stringify() : "null");
+    return o;
+}
 
+struct TestCase {
+
+    int sr, sc;
+    std::vector<std::string> board;
+    int N;
+    std::vector<Food> foods;
+    std::vector<std::vector<Food*>> food_map;
+
+    TestCase(std::istream& in) {
+        { int buf; in >> buf >> buf >> buf; }
+        in >> sr >> sc;
+        sr--; sc--;
+        board.resize(H);
+        in >> board;
+        food_map.resize(H, std::vector<Food*>(W, nullptr));
+        in >> N;
+        for (int i = 0; i < N; i++) {
+            int fr, fc, F, D;
+            in >> fr >> fc >> F >> D;
+            foods.emplace_back(i, fr - 1, fc - 1, F, D);
+        }
+        for (int i = 0; i < N; i++) {
+            auto [id, fr, fc, F, D] = foods[i];
+            food_map[fr][fc] = &foods[i];
+        }
+    }
+
+    struct Result {
+        int score;
+        int best_score;
+        int best_turn;
+    };
+
+    Result evaluate(const std::string& cmds) const {
+        Result res = {0, 0, -1};
+        assert(cmds.size() == K);
+        int turn = -1;
+        int r = sr, c = sc;
+        std::vector<bool> used(N, false);
+        for (char cmd : cmds) {
+            turn++;
+            if (cmd == '-') continue;
+            int nr = r + dr[c2d[cmd]], nc = c + dc[c2d[cmd]];
+            if (board[nr][nc] == '#') continue;
+            if (food_map[nr][nc] && !used[food_map[nr][nc]->id]) {
+                const auto& food = foods[food_map[nr][nc]->id];
+                res.score += food.value - food.decay * turn;
+                used[food.id] = true;
+                if (res.best_score < res.score) {
+                    res.best_score = res.score;
+                    res.best_turn = turn;
+                }
+            }
+            r = nr; c = nc;
+        }
+        return res;
+    }
+
+};
 
 int main() {
 
@@ -224,11 +274,21 @@ int main() {
     std::ostream& out = std::cout;
 #endif
 
-    init(in);
+    init();
+
+    const auto tc = TestCase(in);
 
     std::string ans;
     std::string dirs = "RULD";
     for (int i = 0; i < K; i++) ans += dirs[rnd.next_int(4)];
+
+    auto [score, best_score, best_turn] = tc.evaluate(ans);
+    dump(score, best_score, best_turn);
+
+    // ans の best_turn 文字目までは採用
+    // -> best_turn + 1 文字目以降は全て '-'
+    for (int i = best_turn + 1; i < K; i++) ans[i] = '-';
+
     out << ans << std::endl;
 
     return 0;
