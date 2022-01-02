@@ -231,8 +231,8 @@ struct TestCase {
 
     struct Result {
         int score;
-        int best_score;
-        int best_turn;
+        int highest_score;
+        int turn_to_truncate;
     };
 
     Result evaluate(const std::string& cmds) const {
@@ -250,9 +250,9 @@ struct TestCase {
                 const auto& food = foods[food_map[nr][nc]->id];
                 res.score += food.value - food.decay * turn;
                 used[food.id] = true;
-                if (res.best_score < res.score) {
-                    res.best_score = res.score;
-                    res.best_turn = turn;
+                if (res.highest_score < res.score) {
+                    res.highest_score = res.score;
+                    res.turn_to_truncate = turn;
                 }
             }
             r = nr; c = nc;
@@ -278,18 +278,30 @@ int main() {
 
     const auto tc = TestCase(in);
 
-    std::string ans;
-    std::string dirs = "RULD";
-    for (int i = 0; i < K; i++) ans += dirs[rnd.next_int(4)];
+    std::string best_ans;
+    for (int i = 0; i < K; i++) best_ans += d2c[rnd.next_int(4)];
+    auto best_res = tc.evaluate(best_ans);
+    dump(best_res.highest_score);
 
-    auto [score, best_score, best_turn] = tc.evaluate(ans);
-    dump(score, best_score, best_turn);
+    int loop = 0;
+    while (timer.elapsed_ms() < 9900) {
+        loop++;
+        std::string ans(K, '-');
+        for (int i = 0; i < K; i++) ans[i] = d2c[rnd.next_int(4)];
+        auto res = tc.evaluate(ans);
+        if (best_res.highest_score < res.highest_score) {
+            best_ans = ans;
+            best_res = res;
+            dump(best_res.highest_score);
+        }
+    }
+    dump(loop, best_res.highest_score);
 
-    // ans の best_turn 文字目までは採用
-    // -> best_turn + 1 文字目以降は全て '-'
-    for (int i = best_turn + 1; i < K; i++) ans[i] = '-';
+    // ans の turn_to_truncate 文字目までは採用
+    // -> turn_to_truncate + 1 文字目以降は全て '-'
+    for (int i = best_res.turn_to_truncate + 1; i < K; i++) best_ans[i] = '-';
 
-    out << ans << std::endl;
+    out << best_ans << std::endl;
 
     return 0;
 }
