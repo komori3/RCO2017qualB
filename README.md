@@ -29,3 +29,13 @@
 <img src="img/multistart_random_walk.png">
 
 提出: https://atcoder.jp/contests/rco-contest-2017-qual/submissions/28301178
+
+---
+
+* ランダムウォーク
+* 100 区間 (25 文字ずつ) に分けて iterative にシミュレーション
+* 15253 点で 35 位
+* ビーム系も筋悪というわけではなさそう？
+* 無駄な動きが沢山あって有効ターン数も 1200 とかなので、TSP の方が良さそうではあるが…
+
+<img src="img/random_walk_interval.png">

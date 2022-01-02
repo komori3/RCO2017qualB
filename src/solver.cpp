@@ -237,7 +237,6 @@ struct TestCase {
 
     Result evaluate(const std::string& cmds) const {
         Result res = {0, 0, -1};
-        assert(cmds.size() == K);
         int turn = -1;
         int r = sr, c = sc;
         std::vector<bool> used(N, false);
@@ -279,29 +278,55 @@ int main() {
     const auto tc = TestCase(in);
 
     std::string best_ans;
-    for (int i = 0; i < K; i++) best_ans += d2c[rnd.next_int(4)];
     auto best_res = tc.evaluate(best_ans);
-    dump(best_res.highest_score);
+    dump(best_res.score, best_res.highest_score, best_res.turn_to_truncate);
+
+    int num_interval = 100;
+    int interval_len = K / num_interval;
+    // interval_len 文字ずつ追加
+    constexpr double total_time = 9900.0;
+    std::vector<double> time_ms(num_interval);
+    {
+        for (int i = 0; i < num_interval; i++) {
+            //time_ms[i] = (i + 1);
+            time_ms[i] = 1.0;
+        }
+        double sum = std::accumulate(time_ms.begin(), time_ms.end(), 0.0);
+        for (int i = 0; i < num_interval; i++) {
+            time_ms[i] = time_ms[i] * total_time / sum;
+        }
+        dump(std::accumulate(time_ms.begin(), time_ms.end(), 0.0));
+        dump(time_ms);
+    }
 
     int loop = 0;
-    while (timer.elapsed_ms() < 9900) {
-        loop++;
-        std::string ans(K, '-');
-        for (int i = 0; i < K; i++) ans[i] = d2c[rnd.next_int(4)];
-        auto res = tc.evaluate(ans);
-        if (best_res.highest_score < res.highest_score) {
-            best_ans = ans;
-            best_res = res;
-            dump(best_res.highest_score);
+    double timelimit = 0.0;
+    for (int k = 0; k < num_interval; k++) {
+        std::string inner_best_ans(best_ans);
+        auto inner_best_res(best_res);
+        timelimit += time_ms[k];
+        while (timer.elapsed_ms() < timelimit) {
+            loop++;
+            std::string ans(best_ans);
+            for (int i = 0; i < interval_len; i++) ans += d2c[rnd.next_int(4)];
+            auto res = tc.evaluate(ans);
+            if (inner_best_res.highest_score <= res.highest_score) {
+                inner_best_ans = ans;
+                inner_best_res = res;
+                //dump(inner_best_res.highest_score);
+            }
         }
+        best_ans = inner_best_ans;
+        best_res = inner_best_res;
+        dump(k, loop, best_res.highest_score);
     }
-    dump(loop, best_res.highest_score);
 
     // ans の turn_to_truncate 文字目までは採用
     // -> turn_to_truncate + 1 文字目以降は全て '-'
     for (int i = best_res.turn_to_truncate + 1; i < K; i++) best_ans[i] = '-';
 
     out << best_ans << std::endl;
+    dump(timer.elapsed_ms());
 
     return 0;
 }
