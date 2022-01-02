@@ -204,14 +204,22 @@ std::ostream& operator<<(std::ostream& o, Food* f) {
 
 struct TestCase {
 
-    int sr, sc;
     std::vector<std::string> board;
     int N;
+
     std::vector<Food> foods;
     std::vector<std::vector<Food*>> food_map;
 
+    // last: start, otherwise: food
+    // 始点が末尾なのは food の id 管理上都合がよいため
+    std::vector<pii> points;
+
+    std::vector<std::vector<int>> dist; // (u, v) の最短距離
+    std::vector<std::vector<std::string>> route; // (u, v) の最短経路 (RULD)
+
     TestCase(std::istream& in) {
         { int buf; in >> buf >> buf >> buf; }
+        int sr, sc;
         in >> sr >> sc;
         sr--; sc--;
         board.resize(H);
@@ -222,10 +230,65 @@ struct TestCase {
             int fr, fc, F, D;
             in >> fr >> fc >> F >> D;
             foods.emplace_back(i, fr - 1, fc - 1, F, D);
+            points.emplace_back(fr - 1, fc - 1);
         }
+        points.emplace_back(sr, sc);
         for (int i = 0; i < N; i++) {
             auto [id, fr, fc, F, D] = foods[i];
             food_map[fr][fc] = &foods[i];
+        }
+        calc_shortest_paths();
+    }
+
+    void calc_shortest_paths() {
+        static constexpr int inf = INT_MAX / 2;
+        int V = points.size();
+        dist.resize(V, std::vector<int>(V, inf));
+        route.resize(V, std::vector<std::string>(V));
+
+        int dist_map[H][W];
+        char prev_map[H][W];
+
+        for (int u = 0; u < V; u++) {
+            // init
+            for (int i = 0; i < H; i++) {
+                for (int j = 0; j < W; j++) {
+                    dist_map[i][j] = inf;
+                    prev_map[i][j] = '$';
+                }
+            }
+            // bfs
+            auto [sr, sc] = points[u];
+            std::queue<pii> qu;
+            qu.emplace(sr, sc);
+            dist_map[sr][sc] = 0;
+            while (!qu.empty()) {
+                auto [r, c] = qu.front(); qu.pop();
+                for (int d = 0; d < 4; d++) {
+                    int nr = r + dr[d], nc = c + dc[d];
+                    if (board[nr][nc] == '#' || dist_map[nr][nc] != inf) continue;
+                    dist_map[nr][nc] = dist_map[r][c] + 1;
+                    prev_map[nr][nc] = d2c[d];
+                    qu.emplace(nr, nc);
+                }
+            }
+            // route
+            for (int v = 0; v < V; v++) {
+                if (u == v) continue;
+                // v -> u
+                auto [r, c] = points[v];
+                auto ch = prev_map[r][c];
+                std::string path;
+                while (ch != '$') {
+                    path += ch;
+                    int d = (c2d[ch] + 2) & 3; // 逆方向
+                    r += dr[d]; c += dc[d];
+                    ch = prev_map[r][c];
+                }
+                std::reverse(path.begin(), path.end());
+                route[u][v] = path;
+                dist[u][v] = path.size();
+            }
         }
     }
 
@@ -238,7 +301,7 @@ struct TestCase {
     Result evaluate(const std::string& cmds) const {
         Result res = {0, 0, -1};
         int turn = -1;
-        int r = sr, c = sc;
+        auto [r, c] = points.back();
         std::vector<bool> used(N, false);
         for (char cmd : cmds) {
             turn++;
@@ -255,8 +318,125 @@ struct TestCase {
                 }
             }
             r = nr; c = nc;
+            if (turn == K - 1) break;
         }
         return res;
+    }
+
+    // start を除く点列
+    Result evaluate(const std::vector<int>& ids) const {
+        Result res = { 0, 0, -1 };
+        int turn = -1;
+        int prev_id = points.size() - 1; // start point
+        auto [r, c] = points[prev_id];
+        std::vector<bool> used(N, false);
+        for (int id : ids) {
+            for (char cmd : route[prev_id][id]) {
+                turn++;
+                if (cmd == '-') continue;
+                int nr = r + dr[c2d[cmd]], nc = c + dc[c2d[cmd]];
+                if (board[nr][nc] == '#') continue;
+                if (food_map[nr][nc] && !used[food_map[nr][nc]->id]) {
+                    const auto& food = foods[food_map[nr][nc]->id];
+                    res.score += food.value - food.decay * turn;
+                    used[food.id] = true;
+                    if (res.highest_score < res.score) {
+                        res.highest_score = res.score;
+                        res.turn_to_truncate = turn;
+                    }
+                }
+                r = nr; c = nc;
+                if (turn == K - 1) break;
+            }
+            if (turn == K - 1) break;
+            prev_id = id;
+        }
+        return res;
+    }
+
+    std::string cvt(const std::vector<int>& ids) const {
+        std::string cmds;
+        int prev_id = points.size() - 1;
+        for (int id : ids) {
+            cmds += route[prev_id][id];
+            if (cmds.size() >= K) break;
+            prev_id = id;
+        }
+        if (cmds.size() < K) {
+            cmds += std::string(K - cmds.size(), '-');
+        }
+        else {
+            cmds = cmds.substr(0, K);
+        }
+        return cmds;
+    }
+
+};
+
+struct DistanceTSP {
+
+    Xorshift rnd;
+
+    int V;
+    std::vector<std::vector<int>> dist;
+
+    int cost;
+    std::vector<int> path;
+
+    DistanceTSP(const TestCase& tc) : V(tc.points.size()), dist(tc.dist) {
+        cost = 0;
+        path.push_back(tc.points.size() - 1);
+        for (int u = 0; u < tc.foods.size(); u++) {
+            cost += dist[path.back()][u];
+            path.push_back(u);
+        }
+    }
+
+    int two_opt_diff(int idx1, int idx2) const {
+        if (idx2 == V - 1) {
+            // 終点自由端
+            int p1 = path[idx1], p2 = path[idx1 + 1], p3 = path[idx2];
+            return dist[p1][p3] - dist[p1][p2];
+        }
+        else {
+            int p1 = path[idx1], p2 = path[idx1 + 1], p3 = path[idx2], p4 = path[idx2 + 1];
+            return dist[p1][p3] + dist[p2][p4] - dist[p1][p2] - dist[p3][p4];
+        }
+    }
+
+    double get_temp(double start_temp, double end_temp, int loop, int num_loop) {
+        return end_temp + (start_temp - end_temp) * (num_loop - loop) / num_loop;
+    }
+
+    void two_opt_annealing(int num_loop) {
+        int V = path.size();
+        int min_cost = cost;
+        std::vector<int> best_path;
+        for (int loop = 0; loop < num_loop; loop++) {
+            // "パスの"添字 (点の id ではない)
+            int idx1 = rnd.next_int(V - 1);
+            int idx2 = rnd.next_int(V);
+            if (idx1 == idx2) idx2++;
+            if (idx1 > idx2) std::swap(idx1, idx2);
+            int diff = two_opt_diff(idx1, idx2);
+            double temp = get_temp(1.0, 0.01, loop, num_loop);
+            double prob = std::exp(-diff / temp);
+            if (prob > rnd.next_double()) {
+                // accept
+                std::reverse(path.begin() + idx1 + 1, path.begin() + idx2 + 1);
+                cost += diff;
+                if (cost < min_cost) {
+                    min_cost = cost;
+                    best_path = path;
+                }
+            }
+            if (!(loop & 0x7FFFFF)) {
+                dump(loop, min_cost, cost);
+            }
+        }
+        dump(num_loop, min_cost, cost);
+        cost = min_cost;
+        path = best_path;
     }
 
 };
@@ -277,56 +457,22 @@ int main() {
 
     const auto tc = TestCase(in);
 
-    std::string best_ans;
-    auto best_res = tc.evaluate(best_ans);
-    dump(best_res.score, best_res.highest_score, best_res.turn_to_truncate);
-
-    int num_interval = 100;
-    int interval_len = K / num_interval;
-    // interval_len 文字ずつ追加
-    constexpr double total_time = 9900.0;
-    std::vector<double> time_ms(num_interval);
-    {
-        for (int i = 0; i < num_interval; i++) {
-            //time_ms[i] = (i + 1);
-            time_ms[i] = 1.0;
-        }
-        double sum = std::accumulate(time_ms.begin(), time_ms.end(), 0.0);
-        for (int i = 0; i < num_interval; i++) {
-            time_ms[i] = time_ms[i] * total_time / sum;
-        }
-        dump(std::accumulate(time_ms.begin(), time_ms.end(), 0.0));
-        dump(time_ms);
-    }
-
-    int loop = 0;
-    double timelimit = 0.0;
-    for (int k = 0; k < num_interval; k++) {
-        std::string inner_best_ans(best_ans);
-        auto inner_best_res(best_res);
-        timelimit += time_ms[k];
-        while (timer.elapsed_ms() < timelimit) {
-            loop++;
-            std::string ans(best_ans);
-            for (int i = 0; i < interval_len; i++) ans += d2c[rnd.next_int(4)];
-            auto res = tc.evaluate(ans);
-            if (inner_best_res.highest_score <= res.highest_score) {
-                inner_best_ans = ans;
-                inner_best_res = res;
-                //dump(inner_best_res.highest_score);
-            }
-        }
-        best_ans = inner_best_ans;
-        best_res = inner_best_res;
-        dump(k, loop, best_res.highest_score);
-    }
-
-    // ans の turn_to_truncate 文字目までは採用
-    // -> turn_to_truncate + 1 文字目以降は全て '-'
-    for (int i = best_res.turn_to_truncate + 1; i < K; i++) best_ans[i] = '-';
-
-    out << best_ans << std::endl;
     dump(timer.elapsed_ms());
+
+    DistanceTSP dtsp(tc);
+    dtsp.two_opt_annealing(100000000);
+
+    dump(timer.elapsed_ms());
+
+    std::vector<int> path = dtsp.path;
+    path = std::vector<int>(path.begin() + 1, path.end());
+    auto res = tc.evaluate(path);
+    dump(res.highest_score);
+
+    auto ans = tc.cvt(path);
+    for (int i = res.turn_to_truncate + 1; i < K; i++) ans[i] = '-';
+
+    out << ans << std::endl;
 
     return 0;
 }
