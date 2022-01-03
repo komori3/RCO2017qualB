@@ -62,3 +62,12 @@
 * 負のスコアの点を通ってしまっているから？貪欲ベースの方が実はよかったりする…？
 
 提出: https://atcoder.jp/contests/rco-contest-2017-qual/submissions/28302032
+
+---
+
+* 距離を最小化する TSP で初期解構築
+* <b>価値の低い餌を取る必要はない</b>
+* 「どの餌をスキップするか？」の全探索をスコアが上がらなくなるまで繰り返す
+* 18369 点で 7 位
+
+提出: https://atcoder.jp/contests/rco-contest-2017-qual/submissions/28302320

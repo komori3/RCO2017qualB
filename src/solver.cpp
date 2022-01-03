@@ -354,10 +354,44 @@ struct TestCase {
         return res;
     }
 
-    std::string cvt(const std::vector<int>& ids) const {
+    Result evaluate(const std::vector<int>& ids, const std::vector<bool>& skip_flag) const {
+        Result res = { 0, 0, -1 };
+        int turn = -1;
+        int prev_id = ids[0]; // start point
+        auto [r, c] = points[prev_id];
+        std::vector<bool> used(N, false);
+        for (int i = 1; i < ids.size(); i++) {
+            if (skip_flag[i]) continue;
+            int id = ids[i];
+            for (char cmd : route[prev_id][id]) {
+                turn++;
+                if (cmd == '-') continue;
+                int nr = r + dr[c2d[cmd]], nc = c + dc[c2d[cmd]];
+                if (board[nr][nc] == '#') continue;
+                if (food_map[nr][nc] && !used[food_map[nr][nc]->id]) {
+                    const auto& food = foods[food_map[nr][nc]->id];
+                    res.score += food.value - food.decay * turn;
+                    used[food.id] = true;
+                    if (res.highest_score < res.score) {
+                        res.highest_score = res.score;
+                        res.turn_to_truncate = turn;
+                    }
+                }
+                r = nr; c = nc;
+                if (turn == K - 1) break;
+            }
+            if (turn == K - 1) break;
+            prev_id = id;
+        }
+        return res;
+    }
+
+    std::string cvt(const std::vector<int>& ids, const std::vector<bool>& skip_flag) const {
         std::string cmds;
-        int prev_id = points.size() - 1;
-        for (int id : ids) {
+        int prev_id = ids[0];
+        for (int i = 1; i < ids.size(); i++) {
+            if (skip_flag[i]) continue;
+            int id = ids[i];
             cmds += route[prev_id][id];
             if (cmds.size() >= K) break;
             prev_id = id;
@@ -441,51 +475,6 @@ struct DistanceTSP {
 
 };
 
-std::vector<int> raw_tsp(const TestCase& tc, std::vector<int> path) {
-
-    auto get_temp = [](double start_temp, double end_temp, double progress) {
-        return end_temp + (start_temp - end_temp) * (1.0 - progress);
-    };
-
-    int V = path.size();
-
-    std::vector<int> best_path = path;
-    int best_score = tc.evaluate(path).highest_score;
-    int prev_score = best_score;
-
-    double start_time = timer.elapsed_ms(), now_time, end_time = 9900;
-    int loop = 0;
-    while ((now_time = timer.elapsed_ms()) < end_time) {
-        int idx1 = rnd.next_int(V - 1);
-        int idx2 = rnd.next_int(V);
-        if (idx1 == idx2) idx2++;
-        if (idx1 > idx2) std::swap(idx1, idx2);
-
-        std::reverse(path.begin() + idx1 + 1, path.begin() + idx2 + 1);
-
-        int score = tc.evaluate(path).highest_score;
-        int diff = score - prev_score;
-        double temp = get_temp(1e4, 0.01, (now_time - start_time) / (end_time - start_time));
-        double prob = std::exp(diff / temp);
-
-        if (prob < rnd.next_double()) {
-            // reject
-            std::reverse(path.begin() + idx1 + 1, path.begin() + idx2 + 1);
-        }
-        else {
-            //dump(idx1, idx2, diff, temp, prob);
-            if (best_score < score) {
-                best_score = score;
-                best_path = path;
-                dump(loop, best_score);
-            }
-        }
-        loop++;
-    }
-
-    return best_path;
-}
-
 int main() {
 
 #ifdef _MSC_VER
@@ -509,15 +498,39 @@ int main() {
 
     dump(timer.elapsed_ms());
 
-    auto path = raw_tsp(tc, dtsp.path);
+    auto path = dtsp.path;
+    // 価値の低い餌を取る必要はない
+    std::vector<bool> skip_flag(path.size(), false);
+    auto best_res = tc.evaluate(path);
 
-    auto res = tc.evaluate(path);
-    dump(res.highest_score);
+    dump(best_res.highest_score);
 
-    auto ans = tc.cvt(path);
-    for (int i = res.turn_to_truncate + 1; i < K; i++) ans[i] = '-';
+    while (timer.elapsed_ms() < 9900) {
+        auto inner_res = best_res;
+        int skip_id = -1;
+        for (int id = 1; id < path.size(); id++) {
+            if (skip_flag[id]) continue;
+            skip_flag[id] = true;
+            auto res = tc.evaluate(path, skip_flag);
+            if (inner_res.highest_score < res.highest_score) {
+                inner_res = res;
+                skip_id = id;
+            }
+            skip_flag[id] = false;
+        }
+        if (skip_id == -1) break;
+        best_res = inner_res;
+        skip_flag[skip_id] = true;
+    }
+
+    dump(best_res.highest_score);
+
+    auto ans = tc.cvt(path, skip_flag);
+    for (int i = best_res.turn_to_truncate + 1; i < K; i++) ans[i] = '-';
 
     out << ans << std::endl;
+
+    dump(timer.elapsed_ms());
 
     return 0;
 }
