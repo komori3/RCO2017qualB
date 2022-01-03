@@ -299,7 +299,7 @@ struct TestCase {
     };
 
     Result evaluate(const std::string& cmds) const {
-        Result res = {0, 0, -1};
+        Result res = { 0, 0, -1 };
         int turn = -1;
         auto [r, c] = points.back();
         std::vector<bool> used(N, false);
@@ -323,14 +323,14 @@ struct TestCase {
         return res;
     }
 
-    // start を除く点列
     Result evaluate(const std::vector<int>& ids) const {
         Result res = { 0, 0, -1 };
         int turn = -1;
-        int prev_id = points.size() - 1; // start point
+        int prev_id = ids[0]; // start point
         auto [r, c] = points[prev_id];
         std::vector<bool> used(N, false);
-        for (int id : ids) {
+        for (int i = 1; i < ids.size(); i++) {
+            int id = ids[i];
             for (char cmd : route[prev_id][id]) {
                 turn++;
                 if (cmd == '-') continue;
@@ -441,6 +441,51 @@ struct DistanceTSP {
 
 };
 
+std::vector<int> raw_tsp(const TestCase& tc, std::vector<int> path) {
+
+    auto get_temp = [](double start_temp, double end_temp, double progress) {
+        return end_temp + (start_temp - end_temp) * (1.0 - progress);
+    };
+
+    int V = path.size();
+
+    std::vector<int> best_path = path;
+    int best_score = tc.evaluate(path).highest_score;
+    int prev_score = best_score;
+
+    double start_time = timer.elapsed_ms(), now_time, end_time = 9900;
+    int loop = 0;
+    while ((now_time = timer.elapsed_ms()) < end_time) {
+        int idx1 = rnd.next_int(V - 1);
+        int idx2 = rnd.next_int(V);
+        if (idx1 == idx2) idx2++;
+        if (idx1 > idx2) std::swap(idx1, idx2);
+
+        std::reverse(path.begin() + idx1 + 1, path.begin() + idx2 + 1);
+
+        int score = tc.evaluate(path).highest_score;
+        int diff = score - prev_score;
+        double temp = get_temp(1e4, 0.01, (now_time - start_time) / (end_time - start_time));
+        double prob = std::exp(diff / temp);
+
+        if (prob < rnd.next_double()) {
+            // reject
+            std::reverse(path.begin() + idx1 + 1, path.begin() + idx2 + 1);
+        }
+        else {
+            //dump(idx1, idx2, diff, temp, prob);
+            if (best_score < score) {
+                best_score = score;
+                best_path = path;
+                dump(loop, best_score);
+            }
+        }
+        loop++;
+    }
+
+    return best_path;
+}
+
 int main() {
 
 #ifdef _MSC_VER
@@ -464,8 +509,8 @@ int main() {
 
     dump(timer.elapsed_ms());
 
-    std::vector<int> path = dtsp.path;
-    path = std::vector<int>(path.begin() + 1, path.end());
+    auto path = raw_tsp(tc, dtsp.path);
+
     auto res = tc.evaluate(path);
     dump(res.highest_score);
 

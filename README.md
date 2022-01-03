@@ -53,3 +53,12 @@
 <img src="img/tsp_dist.png">
 
 提出: https://atcoder.jp/contests/rco-contest-2017-qual/submissions/28301804
+
+---
+
+* 距離を最小化する TSP + 生スコアでの TSP
+* 16304 点で 24 位
+* 思ったより改善しなかった
+* 負のスコアの点を通ってしまっているから？貪欲ベースの方が実はよかったりする…？
+
+提出: https://atcoder.jp/contests/rco-contest-2017-qual/submissions/28302032
