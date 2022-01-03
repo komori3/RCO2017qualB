@@ -71,3 +71,7 @@
 * 18369 点で 7 位
 
 提出: https://atcoder.jp/contests/rco-contest-2017-qual/submissions/28302320
+
+---
+
+TODO: 最上位はビームらしいので、そのうち書く
